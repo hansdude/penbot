@@ -64,23 +64,12 @@ type Server struct {
 	Config *Config
 	Left   *Motor
 	Right  *Motor
+	Commands chan *pb.Point
 }
 
-func (s *Server) EnqueuePosition(
+func (server *Server) EnqueuePosition(
 	ctx context.Context, request *pb.EnqueuePositionRequest) (*pb.EnqueuePositionResponse, error) {
-	a1 := left_angle(request.P, s.Config)
-	a2 := right_angle(request.P, s.Config)
-	leftMotorPosition := to_motor_position(a1)
-	rightMotorPosition := to_motor_position(a2)
-	fmt.Println("Position: (%f, %f)", request.P.X, request.P.Y)
-	fmt.Println("Left angle: %f", a1)
-	fmt.Println("Right angle: %f", a2)
-	fmt.Println("Left motor position: %d", leftMotorPosition)
-	fmt.Println("Right motor position: %d", rightMotorPosition)
-	s.Left.SetPosition(leftMotorPosition)
-	s.Right.SetPosition(rightMotorPosition)
-	s.Left.Go()
-	s.Right.Go()
+	server.Commands <- request.P
 	return &pb.EnqueuePositionResponse{}, nil
 }
 
@@ -109,8 +98,26 @@ func (motor *Motor) Go() {
 	motor.Ev3Motor.Command("run-to-abs-pos")
 }
 
-// x: -70mm min, 70mm max
-// y: 70mm min, 120mm max
+func (server *Server) Run() {
+	for point := range server.Commands {
+		a1 := left_angle(point, server.Config)
+		a2 := right_angle(point, server.Config)
+		leftMotorPosition := to_motor_position(a1)
+		rightMotorPosition := to_motor_position(a2)
+		fmt.Println("Position: (%f, %f)", point.X, point.Y)
+		fmt.Println("Left angle: %f", a1)
+		fmt.Println("Right angle: %f", a2)
+		fmt.Println("Left motor position: %d", leftMotorPosition)
+		fmt.Println("Right motor position: %d", rightMotorPosition)
+		server.Left.SetPosition(leftMotorPosition)
+		server.Right.SetPosition(rightMotorPosition)
+		server.Left.Go()
+		server.Right.Go()
+	}
+}
+
+// x: -70mm min, 70mm max, 140mm total
+// y: 70mm min, 120mm max, 50mm total
 func main() {
 	config := Config{
 		A: 32, // 32mm
@@ -118,19 +125,25 @@ func main() {
 		R: 80, // 80mm
 	}
 
+	//TODO: garbage collection?
 	leftMotor := InitMotor("outA")
 	rightMotor := InitMotor("outB")
+
+	robotServer := Server{
+		Config: &config,
+		Left:   leftMotor,
+		Right:  rightMotor,
+		Commands: make(chan *pb.Point),
+	}
+
+	go robotServer.Run()
 
 	lis, err := net.Listen("tcp", ":4321")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
-	pb.RegisterPenBotServer(s, &Server{
-		Config: &config,
-		Left:   leftMotor,
-		Right:  rightMotor,
-	})
+	pb.RegisterPenBotServer(s, &robotServer)
 	reflection.Register(s)
 	fmt.Println("serving")
 	if err := s.Serve(lis); err != nil {
