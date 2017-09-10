@@ -1,0 +1,17 @@
+syntax = "proto3";
+package penbot;
+
+message Point {
+  double x = 1;
+  double y = 2;
+}
+
+message EnqueuePositionRequest {
+  Point p = 1;
+}
+message EnqueuePositionResponse {}
+
+service PenBot {
+    rpc EnqueuePosition(EnqueuePositionRequest) returns (EnqueuePositionResponse);
+}
+
