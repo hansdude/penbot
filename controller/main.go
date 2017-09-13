@@ -38,12 +38,16 @@ func main() {
 	})
 	win.Connect("motion-notify-event", func(win *gtk.Window, evt *gdk.Event) {
     x, y := gdk.EventMotionNewFromEvent(evt).MotionVal()
-    xLimit := math.Max(0, math.Min(x, xDim * scale))
-    yLimit := math.Max(0, math.Min(y, yDim * scale))
+    xLimit := math.Max(0.0, math.Min(x, xDim))
+    yLimit := math.Max(0.0, math.Min(y, yDim))
     fmt.Printf("%f, %f\n", xLimit, yLimit)
+
+    xCorrected := (xLimit - xDim / 2.0) * 140.0 / xDim
+    yCorrected := (yLimit - yDim / 2.0) * -50.0 / yDim + 95.0
+
     requestPoint := pb.Point{
-      X: (xLimit / scale) - (xDim / 2),
-      Y: (yDim / 2) - (yLimit / scale) + yDim / 2, // 70mm offset
+      X: xCorrected,
+      Y: yCorrected,
     }
     fmt.Println(requestPoint)
     _, err = c.EnqueuePosition(context.Background(), &pb.EnqueuePositionRequest{P: &requestPoint})
